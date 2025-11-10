@@ -33,22 +33,25 @@ def producer_worker(queue, sock):
         # process all complete messages
         while "\n" in buffer:
             message, buffer = buffer.split("\n", 1)
+            print(message)
             message = message.strip().split()
             #now message is an array of the 4 values on each line {timestamp, priority, task_id, duration}
             if message: # if a valid message exists:
                 priority = message[1]
                 task_ID = message[2]
-                print(message)
                 queue.put_nowait((priority, task_ID))
 
-def consumer_worker(queue, sock):
+def consumer_worker(queue, sock, worker_ID):
     connSocket, addr = sock.accept()
+    consumer_id = connSocket.recv(2048).decode()
+    print(f"Consumer {worker_ID} connected from {consumer_id}\n")
+
 
     while True:
         #gets and removes tuple data from queue while full
         if ((connSocket.recv(2048)) and (not queue.empty())):
             taskData = queue.get()
-            print(taskData)
+            print(f"[ASSIGN] {taskData[1]} - consumer {worker_ID}")
             connSocket.sendall(b"[COMPLETE] " + taskData[1].encode() + b'\n')
         else:
             connSocket.sendall(b"NOTASK")
@@ -63,6 +66,7 @@ def shutdown(pSock, cSock):
 if __name__ == "__main__":
 
     q = PriorityQueue() 
+    consumer_count = 0
 
     serverIP = sys.argv[1]
     prodPort = int(sys.argv[2])
@@ -73,15 +77,20 @@ if __name__ == "__main__":
     is_running = True;
     print("[SERVER] Server is running...")
 
+
     producer_thread = Thread(target=producer_worker, args=(q, prodSock), daemon=True)
     producer_thread.start()
 
-    worker_thread = Thread(target=consumer_worker, args=(q, conSock), daemon=True)
+    worker_thread = Thread(target=consumer_worker, args=(q, conSock, workerCount), daemon=True)
     worker_thread.start()
+    workerCount += 1
 
     try:
         while is_running:
             #put polling and checking here
+            #if user starts another consumer program
+                #+1 to workerCount
+                #add and start another worker thread
             time.sleep(1)
     except KeyboardInterrupt:
         shutdown(prodSock, conSock)
